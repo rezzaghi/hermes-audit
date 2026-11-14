@@ -29,7 +29,7 @@ test("offline report filters by risk and keyword without executing transcript co
   await expect(page.locator(".entry")).toHaveCount(1);
   await expect(page.locator(".entry")).toContainText("terminal");
   await page.locator("#severity-filter").selectOption("");
-  await page.locator("#query").fill("Kimi official");
+  await page.locator("#query").fill("Acme official");
   await expect(page.locator(".entry")).toHaveCount(1);
   await expect(page.locator(".entry")).toContainText("web_search");
 });

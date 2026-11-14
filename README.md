@@ -1,60 +1,107 @@
 # Hermes Audit
 
-A local, read-only audit viewer for Hermes Agent sessions. It reads Hermes's `state.db` and generates **one self-contained HTML file**: no server, CDN, account, or runtime dependencies. Search the recorded messages and tool calls; filter by severity, tool, tag, session, type, or failure; inspect arguments/results and why an action was flagged.
+A **local, read-only audit viewer** for [Hermes Agent](https://github.com/NousResearch/hermes-agent) session history. Turn `state.db` into one searchable HTML file you can open offline—no server, account, CDN, or Python runtime needed to *view* the report.
 
-![No live data in repository](https://img.shields.io/badge/data-local%20only-617568)
+Filter recorded messages and tool calls by **severity, tag, tool, session, keyword, type, and failure**. Expand a record to inspect its arguments, result, and the rule that assigned its label. Add your own tags, notes, or severity overrides in your browser.
 
-## Quick start
+> [!IMPORTANT]
+> Audit labels are review prompts, **not** proof that an action was dangerous or safe. Generated reports can contain private conversations despite best-effort redaction. Keep them local and inspect them before sharing.
 
-Requires Python 3.10+ and a Hermes installation with `state.db` (modern Hermes). From the cloned repository:
+## Screenshots — fictional data only
+
+These screenshots come from the repository's **synthetic test fixture**. They contain no actual Hermes sessions or user credentials.
+
+**All sessions and severities, ordered by highest severity**
+
+![Synthetic overview showing the offline audit report and its filters](docs/screenshots/overview.png)
+
+**Critical action, with the recorded result and classification explained**
+
+![Synthetic critical action with expanded evidence](docs/screenshots/critical-detail.png)
+
+**Browser tag filter**
+
+![Synthetic browser tag filter](docs/screenshots/browser-tag.png)
+
+## Get started
+
+**Requirements:** Python 3.10+ to generate a report, and a Hermes profile containing `state.db`. The exporter uses only Python's standard library. Modern browsers can open the resulting file offline.
+
+### Install directly from GitHub
 
 ```bash
-python -m hermes_audit --out audit-report.html
-```
-
-Open `audit-report.html` in a browser. The default database is `$HERMES_HOME/state.db` if set, otherwise `~/.hermes/state.db`. You can also install the command:
-
-```bash
-python -m pip install -e .
+python -m pip install git+https://github.com/rezzaghi/hermes-audit.git
 hermes-audit --out audit-report.html
 ```
 
-### Useful options
+Open `audit-report.html` locally. By default, the tool reads `$HERMES_HOME/state.db` when `HERMES_HOME` is set, or `~/.hermes/state.db` otherwise. The database is opened **read-only**. An existing HTML report is replaced by a fresh snapshot when you run the command again; it does not live-refresh.
+
+### Or run from a clone without installing
 
 ```bash
-# Another Hermes profile or machine:
-python -m hermes_audit --db /path/to/state.db --out audit-report.html
-
-# One session, optionally including its child/delegated/compression sessions:
-python -m hermes_audit --session SESSION_ID --lineage --out investigation.html
-
-# Share a focused example: only high/critical tool actions, no chat messages:
-python -m hermes_audit --min-severity high --out high-risk.html
-
-python -m hermes_audit --help
+git clone https://github.com/rezzaghi/hermes-audit.git
+cd hermes-audit
+python -m hermes_audit --out audit-report.html
 ```
 
-The source database is opened **read-only**; the tool does not change Hermes or require a login. Running it again makes a fresh snapshot. It does not live-refresh an already-open report.
+On a machine where the Hermes database is elsewhere, provide its path:
 
-## What the report does
+```bash
+python -m hermes_audit --db /path/to/state.db --out audit-report.html
+```
 
-- Pairs tool calls with recorded results and retains user/assistant messages for context. An unmatched tool result remains visible.
-- Applies **explainable heuristic** labels: `critical`, `high`, `medium`, `low`, and `info` (conversation context). Examples: a credential-file reference or destructive shell command is critical; an external send/push or browser click is high; a local edit or opaque code execution is medium; a straightforward search is low. An unknown tool defaults to review, not "safe."
-- Lets you search across tool arguments, results, messages, reasons, and personal notes. Filters combine, and sorting supports time or severity. Long reports load records in batches.
-- Lets you add tags, notes, or an override severity to any record. These are stored in your browser's local storage, **not** Hermes's database; **Export tags / Import tags** moves them between browsers or machines. If browser storage is blocked on `file://`, export before closing the page.
-- Includes a best-effort secret scrubber and escapes all transcript text so an HTML/script string from a tool result cannot run as page code. The report has a restrictive Content Security Policy and makes no network requests.
+### Try it without using your own logs
+
+From the cloned repository, generate a deliberately fictional database and report:
+
+```bash
+python tests/fixture.py demo.db
+python -m hermes_audit --db demo.db --out demo.html
+```
+
+Both generated files are ignored by Git. You can safely explore the severity and tag filters without opening a personal session.
+
+## Useful commands
+
+```bash
+# All sessions in the selected database, all severities (default):
+hermes-audit --out audit-report.html
+
+# One session and its child/delegated/compression sessions:
+hermes-audit --session SESSION_ID --lineage --out investigation.html
+
+# Export only high and critical tool actions (no chat messages):
+hermes-audit --min-severity high --out high-risk.html
+
+# Explicit database path (for another profile or copied database):
+hermes-audit --db /path/to/state.db --out profile-report.html
+
+hermes-audit --help
+```
+
+Inside the report, filters combine: you can select a session and tag, then search within those results. The report loads matching cards in batches, but the count reflects every match. **Export tags** saves annotations as JSON; **Import tags** restores them on another browser. Annotations live in browser storage, not in Hermes's database.
+
+## How to read a label
+
+- `critical`: rules for destructive shell attempts or access to sensitive credential paths.
+- `high`: external writes/sends or an interaction that warrants closer review.
+- `medium`: local writes, opaque code execution, or actions needing contextual review.
+- `low`: straightforward reads and searches.
+- `info`: conversation messages included for context.
+
+Each record lists the specific reason and tags behind its label. Failures remain visible and are labeled by the **attempted** action. A result without a matching call is shown as an orphan rather than discarded. These are retrospective heuristics, not execution-time protections.
 
 ## Privacy and limitations
 
-**Do not push generated reports, databases, or exported annotations to GitHub.** They can contain private messages, paths, and tool output. `.gitignore` blocks generated HTML and common database filenames, but review `git status` before pushing. Generated HTML files are written with owner-only permissions (`0600`). Redaction covers familiar key formats, authorization headers, and common token/password fields, including JSON-encoded tool results; **it cannot recognize every secret or personal detail**. Review the HTML before sharing it.
-
-Classification is retrospective and rule-based. It is **not a security boundary**, an approval system, or a verdict that an action was harmful. A failed dangerous action remains labeled by the action attempted. Some wrapper tools execute several steps in one call; the report shows the recorded wrapper arguments/results, not each internal browser network request. System prompts and provider reasoning fields are deliberately omitted.
-
-Default report scope is all sessions in the chosen database. `--session` filters to one; `--lineage` includes descendants, **not ancestors**. A session split from an earlier parent may require exporting the parent instead.
+- **Never publish a real report or database.** Real messages, local paths, and tool output may remain in the HTML even after redaction. Generated `*.html`, `*.db`, SQLite files, and annotation exports are ignored by Git; still inspect `git status` before committing.
+- Reports are written with owner-only permissions (`0600`) on POSIX systems. Redaction recognizes common key fields, authorization headers, and JSON-encoded tool results, but **cannot guarantee removal of every secret or personal detail**.
+- Report data and UI code are embedded in the HTML. Transcript text is escaped and rendered as text; the report has a restrictive Content Security Policy and makes no network requests. System prompts and provider reasoning are not exported.
+- Tool wrappers may perform multiple internal steps. This report shows the **recorded** call and result, not every browser network request. `--lineage` includes descendants of the selected session, not ancestors.
+- If browser storage is unavailable for local `file://` pages, export annotations before closing the report.
 
 ## Development
 
-Python runtime uses the standard library. Node and Playwright are **test-only** dependencies.
+Node and Playwright are **test-only** dependencies; normal report generation needs neither.
 
 ```bash
 npm ci
@@ -62,8 +109,8 @@ npx playwright install chromium
 npm test
 ```
 
-The suite exercises SQLite ingestion, failure pairing, severity rules, redaction, static HTML safety, keyword/tag filtering, browser storage, and real Chromium rendering. Browser fixtures are synthetic and clearly labeled; no real Hermes conversation is checked into this repository.
+The suite covers SQLite ingestion and result pairing, risk rules, redaction, HTML/script safety, filtering, annotations, and offline Chromium rendering. All committed fixture data and screenshots are synthetic.
 
 ## License
 
-MIT. The Git repository is local until you choose to publish it.
+MIT.
