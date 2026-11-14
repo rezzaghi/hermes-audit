@@ -1,0 +1,21 @@
+# Generated reports and Hermes databases can contain private conversation data.
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.html
+*annotations*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Browser tests and dependencies
+node_modules/
+test-results/
+playwright-report/
+.DS_Store
